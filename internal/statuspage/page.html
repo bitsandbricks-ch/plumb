@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="60">
+<title>{{.Title}}</title>
+<style>
+:root{--bg:#f7f6f3;--card:#fff;--fg:#1d1b18;--muted:#6b665e;--line:#e6e2da;--up:#30a46c;--slow:#f5a524;--down:#e5484d;--unknown:#d4d0c8}
+@media (prefers-color-scheme:dark){:root{--bg:#161513;--card:#1f1d1a;--fg:#ece9e4;--muted:#9a948a;--line:#2e2b27;--unknown:#3a3631}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:760px;margin:0 auto;padding:40px 16px}
+h1{font-size:1.4rem;margin:0 0 24px}
+.banner{padding:16px 20px;border-radius:10px;color:#fff;font-weight:600;margin-bottom:24px}
+.b-up{background:var(--up)}.b-slow{background:var(--slow);color:#1d1b18}.b-down{background:var(--down)}.b-unknown{background:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px}
+.svc{padding:16px 20px;border-top:1px solid var(--line)}.svc:first-child{border-top:0}
+.row{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.name{font-weight:600}
+.s-up{color:var(--up)}.s-slow{color:var(--slow)}.s-down{color:var(--down)}.s-unknown{color:var(--muted)}
+.bars{display:flex;gap:2px;margin:10px 0 4px;height:28px}
+.bars span{flex:1;border-radius:2px;background:var(--unknown)}
+.bars .up{background:var(--up)}.bars .slow{background:var(--slow)}.bars .down{background:var(--down)}
+.meta{display:flex;justify-content:space-between;color:var(--muted);font-size:.8rem}
+footer{color:var(--muted);font-size:.85rem;margin-top:20px}
+</style>
+</head>
+<body>
+<main>
+<h1>{{.Title}}</h1>
+<div class="banner b-{{.Overall}}">{{headline .Overall}}</div>
+<div class="card">
+{{range .Services}}
+<section class="svc">
+  <div class="row"><span class="name">{{.Name}}</span><span class="s-{{.State}}">{{label .State}}</span></div>
+  <div class="bars" aria-label="Last 24 hours">{{range .Bars}}<span class="{{.}}" title="{{label .}}"></span>{{end}}</div>
+  <div class="meta"><span>24 hours ago</span><span>{{pct .Uptime24h}} uptime</span><span>now</span></div>
+</section>
+{{end}}
+</div>
+<footer>Checked every minute. Updated {{.UpdatedAt.UTC.Format "15:04 UTC"}}.</footer>
+</main>
+</body>
+</html>
