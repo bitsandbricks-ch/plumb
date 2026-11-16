@@ -72,7 +72,8 @@ go build ./cmd/plumb
 ```
 
 Images are built by GitHub Actions to `ghcr.io/bitsandbricks-ch/plumb`
-(`latest` and `sha-…` from `main`, `X.Y.Z` from `vX.Y.Z` tags).
+(`latest`, `sha-…` and `main-<UTC timestamp>-<sha>` from `main`, `X.Y.Z` from
+`vX.Y.Z` tags). Oak's Flux image automation follows the `main-…` tags.
 
 ## Roadmap
 
