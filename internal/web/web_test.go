@@ -21,7 +21,7 @@ func TestWebhook(t *testing.T) {
 		}
 		got = append(got, w)
 		return nil
-	}, func() bool { return false }, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}, func() bool { return false }, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	do := func(auth, body string) int {
 		r := httptest.NewRequest("POST", "/webhook/alertmanager", strings.NewReader(body))

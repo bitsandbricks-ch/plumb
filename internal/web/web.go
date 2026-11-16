@@ -18,8 +18,12 @@ type AlertHandler func(ctx context.Context, w alertmanager.Webhook) error
 
 // Handler builds the internal mux. token may be empty (then the
 // NetworkPolicy is the only guard).
-func Handler(token string, onAlert AlertHandler, ready func() bool, log *slog.Logger) http.Handler {
+func Handler(token string, onAlert AlertHandler, ready func() bool, metrics http.Handler, log *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
+	if metrics != nil {
+		// Scraped by VictoriaMetrics: the status page history.
+		mux.Handle("GET /metrics", metrics)
+	}
 	mux.HandleFunc("POST /webhook/alertmanager", func(w http.ResponseWriter, r *http.Request) {
 		if token != "" {
 			got := r.Header.Get("Authorization")

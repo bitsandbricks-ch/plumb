@@ -26,6 +26,7 @@ type API interface {
 	ChannelMessageEditComplex(m *discordgo.MessageEdit, options ...discordgo.RequestOption) (*discordgo.Message, error)
 	InteractionRespond(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse, options ...discordgo.RequestOption) error
 	InteractionResponseEdit(interaction *discordgo.Interaction, newresp *discordgo.WebhookEdit, options ...discordgo.RequestOption) (*discordgo.Message, error)
+	ChannelMessages(channelID string, limit int, beforeID, afterID, aroundID string, options ...discordgo.RequestOption) ([]*discordgo.Message, error)
 }
 
 // Silencer is the part of alertmanager.Client used by Ack.
@@ -40,6 +41,9 @@ type Options struct {
 	PlatformRoleID string
 	PingOnCritical bool
 	GrafanaURL     string
+	// Channel for /notice posts; empty = the alert channel.
+	NoticeChannelID string
+	Location        *time.Location
 }
 
 // Bot handles alerts and interactions.
@@ -54,10 +58,21 @@ type Bot struct {
 	log *slog.Logger
 	now func() time.Time
 
-	mu   sync.Mutex
-	msgs map[string]string // Alertmanager groupKey -> Discord message ID
+	mu     sync.Mutex
+	msgs   map[string]string // Alertmanager groupKey -> Discord message ID
+	selfID string            // the bot's own user ID, from Ready
 
 	ready atomic.Bool
+
+	// OnNotice is called after a notice was posted or resolved.
+	OnNotice func()
+}
+
+func (b *Bot) loc() *time.Location {
+	if b.opt.Location != nil {
+		return b.opt.Location
+	}
+	return time.Local
 }
 
 // New builds a Bot around an API (usually a *discordgo.Session).
@@ -71,6 +86,7 @@ func New(api API, opt Options, am interface {
 // Commands are the slash commands registered in the guild.
 var Commands = []*discordgo.ApplicationCommand{
 	{Name: "status", Description: "Health summary of the Oak cluster (read-only)"},
+	noticeCommand,
 }
 
 // Attach wires handlers onto a live session and registers slash commands
@@ -82,6 +98,9 @@ func (b *Bot) Attach(s *discordgo.Session) {
 			b.log.Error("registering slash commands failed", "err", err)
 			return
 		}
+		b.mu.Lock()
+		b.selfID = r.User.ID
+		b.mu.Unlock()
 		b.ready.Store(true)
 		b.log.Info("connected to Discord", "user", r.User.Username)
 	})
@@ -173,10 +192,16 @@ func (b *Bot) HandleInteraction(i *discordgo.Interaction) {
 		switch cmd {
 		case "status":
 			b.status(i)
+		case "notice":
+			b.postNotice(i, uname)
 		default:
 			b.ephemeral(i, "Unknown command.")
 		}
 	case discordgo.InteractionMessageComponent:
+		if i.MessageComponentData().CustomID == "plumb:notice:resolve" {
+			b.resolveNotice(i, uname)
+			return
+		}
 		b.ack(i, uid, uname)
 	}
 }

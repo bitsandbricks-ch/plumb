@@ -14,6 +14,7 @@ import (
 )
 
 type fakeAPI struct {
+	history   []*discordgo.Message
 	sent      []*discordgo.MessageSend
 	edits     []*discordgo.MessageEdit
 	responses []*discordgo.InteractionResponse
@@ -22,6 +23,9 @@ type fakeAPI struct {
 func (f *fakeAPI) ChannelMessageSendComplex(_ string, d *discordgo.MessageSend, _ ...discordgo.RequestOption) (*discordgo.Message, error) {
 	f.sent = append(f.sent, d)
 	return &discordgo.Message{ID: "m1"}, nil
+}
+func (f *fakeAPI) ChannelMessages(string, int, string, string, string, ...discordgo.RequestOption) ([]*discordgo.Message, error) {
+	return f.history, nil
 }
 func (f *fakeAPI) ChannelMessageEditComplex(m *discordgo.MessageEdit, _ ...discordgo.RequestOption) (*discordgo.Message, error) {
 	f.edits = append(f.edits, m)

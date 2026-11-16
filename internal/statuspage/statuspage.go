@@ -1,123 +1,280 @@
-// Package statuspage probes the public apps and serves a small public
-// status page. It shows only per-service up/slow/down, never cluster
-// internals (pods, nodes, errors stay in Discord).
+// Package statuspage probes the public apps and serves the public status
+// page. It shows per-service up/degraded/down, 90 days of daily uptime, a
+// cluster summary made of counts only, maintenance notices and past
+// incidents. Pod names, node names, alert names and error text never appear
+// on it: those stay in Discord.
 package statuspage
 
 import (
 	"context"
-	"embed"
-	"encoding/json"
-	"html/template"
 	"log/slog"
-	"math"
 	"net/http"
-	"strconv"
+	"slices"
+	"sort"
 	"sync"
 	"time"
-
-	"github.com/bitsandbricks-ch/plumb/internal/config"
 )
 
 // State of one check.
 type State string
 
 const (
-	Up      State = "up"
-	Slow    State = "slow"
-	Down    State = "down"
-	Unknown State = "unknown"
+	Up          State = "up"
+	Degraded    State = "degraded"
+	Down        State = "down"
+	Maintenance State = "maintenance"
+	Unknown     State = "unknown"
 )
 
 func rank(s State) int {
 	switch s {
 	case Up:
 		return 0
-	case Slow:
+	case Maintenance:
 		return 1
-	case Down:
+	case Degraded:
 		return 2
+	case Down:
+		return 3
 	}
 	return -1
 }
 
-const (
-	window  = 24 * time.Hour
-	buckets = 48 // 30-minute bars
-)
+// metricValue is what plumb_status_state exports: 2 up, 1 degraded, 0 down.
+func metricValue(s State) (float64, bool) {
+	switch s {
+	case Up:
+		return 2, true
+	case Degraded:
+		return 1, true
+	case Down:
+		return 0, true
+	}
+	return 0, false
+}
 
-type sample struct {
-	at    time.Time
+// Target is one public app, probed over HTTP.
+type Target struct {
+	Name  string `json:"name"`
+	Group string `json:"group"`
+	URL   string `json:"-"`
+	Order int    `json:"-"`
+}
+
+// Component is a non-HTTP check shown under "Platform" (the cluster, the bot).
+type Component struct {
+	Name  string
+	Check func(ctx context.Context) State
+}
+
+// Stat is one public number in the cluster summary. Counts and percentages
+// only, never names.
+type Stat struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+	State State  `json:"state"`
+}
+
+type result struct {
 	state State
+	lat   time.Duration
+	at    time.Time
 }
 
-// Service is the public view of one service.
-type Service struct {
-	Name      string    `json:"name"`
-	State     State     `json:"state"`
-	LatencyMS int64     `json:"latency_ms"`
-	CheckedAt time.Time `json:"checked_at"`
-	Uptime24h float64   `json:"uptime_24h"` // 0..100, -1 when no data
-	Bars      []State   `json:"bars"`       // oldest first, 30 min each
+// Options configure a Checker.
+type Options struct {
+	Title       string
+	Host        string        // shown in the title bar, e.g. status.reyki.me
+	Slow        time.Duration // slower than this is "degraded"
+	Location    *time.Location
+	NoticesFile string                                      // optional
+	NoticeFeed  func(ctx context.Context) ([]Notice, error) // optional: /notice posts in Discord
+	History     RangeQuerier                                // optional: VictoriaMetrics
+	Discover    func(ctx context.Context) ([]Target, error) // optional: IngressRoute discovery
+	Log         *slog.Logger
 }
 
-// Page is everything the template and JSON endpoint show.
-type Page struct {
-	Title     string    `json:"title"`
-	Overall   State     `json:"overall"`
-	Services  []Service `json:"services"`
-	UpdatedAt time.Time `json:"updated_at"`
-}
-
-// Checker probes services on an interval and keeps 24h of history in memory.
+// Checker probes everything on an interval and builds the page.
 type Checker struct {
-	title    string
-	services []config.Service
-	slow     time.Duration
-	http     *http.Client
-	log      *slog.Logger
-	now      func() time.Time
+	opt    Options
+	static []Target
+	http   *http.Client
+	now    func() time.Time
 
-	mu      sync.RWMutex
-	history map[string][]sample
-	latest  map[string]Service
+	components []Component
+	stats      func(ctx context.Context) []Stat
+
+	mu          sync.RWMutex
+	discovered  []Target
+	latest      map[string]result
+	latestStats []Stat
+	history     History
+	notices     []Notice
 }
 
-// NewChecker builds a checker.
-func NewChecker(title string, services []config.Service, slow time.Duration, log *slog.Logger) *Checker {
+// NewChecker builds a checker for the given static targets.
+func NewChecker(static []Target, opt Options) *Checker {
+	if opt.Location == nil {
+		opt.Location = time.Local
+	}
+	if opt.Log == nil {
+		opt.Log = slog.Default()
+	}
 	return &Checker{
-		title: title, services: services, slow: slow, log: log, now: time.Now,
-		http:    &http.Client{Timeout: 10 * time.Second},
-		history: map[string][]sample{}, latest: map[string]Service{},
+		opt: opt, static: static, now: time.Now,
+		http:   &http.Client{Timeout: 10 * time.Second},
+		latest: map[string]result{},
 	}
 }
 
-// Run probes every interval until ctx ends.
+// AddComponent adds a check under "Platform".
+func (c *Checker) AddComponent(comp Component) { c.components = append(c.components, comp) }
+
+// SetStats sets the source of the cluster summary numbers.
+func (c *Checker) SetStats(f func(ctx context.Context) []Stat) { c.stats = f }
+
+// Run probes every interval and refreshes history, notices and discovery
+// every 5 minutes, until ctx ends.
 func (c *Checker) Run(ctx context.Context, interval time.Duration) {
+	// Give the Discord connection a moment, so a fresh start doesn't record
+	// the bot as down.
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(10 * time.Second):
+	}
+	c.Refresh(ctx)
 	c.CheckAll(ctx)
-	t := time.NewTicker(interval)
-	defer t.Stop()
+	probe := time.NewTicker(interval)
+	refresh := time.NewTicker(5 * time.Minute)
+	defer probe.Stop()
+	defer refresh.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-t.C:
+		case <-probe.C:
 			c.CheckAll(ctx)
+		case <-refresh.C:
+			c.Refresh(ctx)
 		}
 	}
 }
 
-// CheckAll probes every service once, in parallel.
+// Targets returns static targets plus discovered ones (static wins by name),
+// sorted by group, order, name.
+func (c *Checker) Targets() []Target {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	seen := map[string]bool{}
+	var out []Target
+	for _, t := range append(slices.Clone(c.static), c.discovered...) {
+		if seen[t.Name] {
+			continue
+		}
+		seen[t.Name] = true
+		if t.Group == "" {
+			t.Group = "Apps"
+		}
+		out = append(out, t)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Group != out[j].Group {
+			return out[i].Group < out[j].Group
+		}
+		if out[i].Order != out[j].Order {
+			return out[i].Order < out[j].Order
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+// Refresh reloads discovery, notices and history. Each part fails on its
+// own: the page keeps the last good value.
+func (c *Checker) Refresh(ctx context.Context) {
+	now := c.now()
+	if c.opt.Discover != nil {
+		if ts, err := c.opt.Discover(ctx); err != nil {
+			c.opt.Log.Warn("service discovery failed", "err", err)
+		} else {
+			c.mu.Lock()
+			c.discovered = ts
+			c.mu.Unlock()
+		}
+	}
+	c.RefreshNotices(ctx)
+	if c.opt.History != nil {
+		if h, err := LoadHistory(ctx, c.opt.History, now, c.opt.Location); err != nil {
+			c.opt.Log.Warn("loading history failed", "err", err)
+		} else {
+			c.mu.Lock()
+			c.history = h
+			c.mu.Unlock()
+		}
+	}
+}
+
+// RefreshNotices reloads the notices file and the Discord feed. Called by
+// Refresh, and right after a /notice so the page updates at once.
+func (c *Checker) RefreshNotices(ctx context.Context) {
+	if c.opt.NoticesFile == "" && c.opt.NoticeFeed == nil {
+		return
+	}
+	var all []Notice
+	ok := true
+	if c.opt.NoticesFile != "" {
+		ns, err := LoadNotices(c.opt.NoticesFile)
+		if err != nil {
+			c.opt.Log.Warn("reading notices failed", "file", c.opt.NoticesFile, "err", err)
+			ok = false
+		}
+		all = append(all, ns...)
+	}
+	if c.opt.NoticeFeed != nil {
+		ns, err := c.opt.NoticeFeed(ctx)
+		if err != nil {
+			c.opt.Log.Warn("reading Discord notices failed", "err", err)
+			ok = false
+		}
+		all = append(all, ns...)
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if ok || len(all) > 0 {
+		c.notices = all
+	}
+}
+
+// CheckAll probes every target and component once, in parallel.
 func (c *Checker) CheckAll(ctx context.Context) {
 	var wg sync.WaitGroup
-	for _, s := range c.services {
+	for _, t := range c.Targets() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			state, lat := c.probe(ctx, s.URL)
+			state, lat := c.probe(ctx, t.URL)
 			if state == Down { // one retry, so a single dropped packet isn't an outage
-				state, lat = c.probe(ctx, s.URL)
+				state, lat = c.probe(ctx, t.URL)
 			}
-			c.record(s.Name, state, lat)
+			c.record(t.Name, state, lat)
+		}()
+	}
+	for _, comp := range c.components {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			c.record(comp.Name, comp.Check(ctx), 0)
+		}()
+	}
+	if c.stats != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			st := c.stats(ctx)
+			c.mu.Lock()
+			c.latestStats = st
+			c.mu.Unlock()
 		}()
 	}
 	wg.Wait()
@@ -133,132 +290,21 @@ func (c *Checker) probe(ctx context.Context, url string) (State, time.Duration) 
 	resp, err := c.http.Do(req)
 	lat := time.Since(start)
 	if err != nil {
-		c.log.Debug("probe failed", "url", url, "err", err)
+		c.opt.Log.Debug("probe failed", "url", url, "err", err)
 		return Down, lat
 	}
 	resp.Body.Close()
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= 500 || resp.StatusCode == 404 {
 		return Down, lat
 	}
-	if lat > c.slow {
-		return Slow, lat
+	if lat > c.opt.Slow {
+		return Degraded, lat
 	}
 	return Up, lat
 }
 
 func (c *Checker) record(name string, st State, lat time.Duration) {
-	now := c.now()
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	h := append(c.history[name], sample{now, st})
-	cut := 0
-	for cut < len(h) && now.Sub(h[cut].at) > window {
-		cut++
-	}
-	c.history[name] = h[cut:]
-	c.latest[name] = Service{Name: name, State: st, LatencyMS: lat.Milliseconds(), CheckedAt: now}
-}
-
-// Snapshot builds the page data.
-func (c *Checker) Snapshot() Page {
-	now := c.now()
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	p := Page{Title: c.title, Overall: Up, UpdatedAt: now}
-	for _, s := range c.services {
-		svc, ok := c.latest[s.Name]
-		if !ok {
-			svc = Service{Name: s.Name, State: Unknown}
-		}
-		bars := make([]State, buckets)
-		for i := range bars {
-			bars[i] = Unknown
-		}
-		good, total := 0, 0
-		start := now.Add(-window)
-		for _, x := range c.history[s.Name] {
-			i := int(x.at.Sub(start) / (window / buckets))
-			if i < 0 || i >= buckets {
-				if i == buckets {
-					i = buckets - 1
-				} else {
-					continue
-				}
-			}
-			if rank(x.state) > rank(bars[i]) {
-				bars[i] = x.state
-			}
-			total++
-			if x.state != Down {
-				good++
-			}
-		}
-		svc.Bars = bars
-		svc.Uptime24h = -1
-		if total > 0 {
-			svc.Uptime24h = float64(good) * 100 / float64(total)
-		}
-		if rank(svc.State) > rank(p.Overall) {
-			p.Overall = svc.State
-		}
-		p.Services = append(p.Services, svc)
-	}
-	return p
-}
-
-//go:embed page.html
-var files embed.FS
-
-var tmpl = template.Must(template.New("page.html").Funcs(template.FuncMap{
-	"headline": func(s State) string {
-		switch s {
-		case Up:
-			return "All systems operational"
-		case Slow:
-			return "Some services are slow"
-		case Down:
-			return "Some services are down"
-		}
-		return "Checking…"
-	},
-	"label": func(s State) string {
-		return map[State]string{Up: "Operational", Slow: "Slow", Down: "Down", Unknown: "No data"}[s]
-	},
-	"pct": func(f float64) string {
-		if f < 0 {
-			return "–"
-		}
-		return template.HTMLEscapeString(trimPct(f))
-	},
-}).ParseFS(files, "page.html"))
-
-func trimPct(f float64) string {
-	return strconv.FormatFloat(math.Floor(f*100)/100, 'f', -1, 64) + "%"
-}
-
-// Handler serves the public page. Nothing else is reachable on this listener.
-func (c *Checker) Handler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		secure(w)
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := tmpl.Execute(w, c.Snapshot()); err != nil {
-			c.log.Error("rendering status page", "err", err)
-		}
-	})
-	mux.HandleFunc("GET /api/status.json", func(w http.ResponseWriter, r *http.Request) {
-		secure(w)
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		_ = json.NewEncoder(w).Encode(c.Snapshot())
-	})
-	return mux
-}
-
-func secure(w http.ResponseWriter) {
-	h := w.Header()
-	h.Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'")
-	h.Set("X-Content-Type-Options", "nosniff")
-	h.Set("Referrer-Policy", "no-referrer")
-	h.Set("Cache-Control", "public, max-age=30")
+	c.latest[name] = result{st, lat, c.now()}
+	c.mu.Unlock()
 }

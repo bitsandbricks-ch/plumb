@@ -37,6 +37,11 @@ type Config struct {
 	StatusServices []Service
 	StatusInterval time.Duration
 	StatusSlow     time.Duration
+	StatusHost     string // shown in the page's title bar
+	NoticesFile    string // git-managed notices (ConfigMap), optional
+	Discovery      bool   // list opted-in IngressRoutes
+	NoticeChannel  string // Discord channel for /notice; empty = alert channel
+	TimeZone       string
 }
 
 // FromEnv loads the config. Secrets may be given directly or as *_FILE paths.
@@ -51,6 +56,10 @@ func FromEnv() (Config, error) {
 		ListenAddr:      env("PLUMB_LISTEN_ADDR", ":8080"),
 		StatusAddr:      env("PLUMB_STATUS_ADDR", ":8081"),
 		StatusTitle:     env("PLUMB_STATUS_TITLE", "BitsAndBricks status"),
+		StatusHost:      os.Getenv("PLUMB_STATUS_HOST"),
+		NoticesFile:     os.Getenv("PLUMB_NOTICES_FILE"),
+		NoticeChannel:   os.Getenv("PLUMB_NOTICE_CHANNEL_ID"),
+		TimeZone:        env("PLUMB_TIMEZONE", "Europe/Zurich"),
 	}
 	var err error
 	if c.DiscordToken, err = secret("PLUMB_DISCORD_TOKEN"); err != nil {
@@ -67,6 +76,12 @@ func FromEnv() (Config, error) {
 	}
 	if c.StatusSlow, err = time.ParseDuration(env("PLUMB_STATUS_SLOW", "2s")); err != nil {
 		return c, fmt.Errorf("PLUMB_STATUS_SLOW: %w", err)
+	}
+	if c.Discovery, err = strconv.ParseBool(env("PLUMB_STATUS_DISCOVERY", "false")); err != nil {
+		return c, fmt.Errorf("PLUMB_STATUS_DISCOVERY: %w", err)
+	}
+	if _, err = time.LoadLocation(c.TimeZone); err != nil {
+		return c, fmt.Errorf("PLUMB_TIMEZONE: %w", err)
 	}
 	if c.StatusServices, err = ParseServices(os.Getenv("PLUMB_STATUS_SERVICES")); err != nil {
 		return c, err

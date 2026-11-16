@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	_ "time/tzdata" // the image has no zoneinfo
 
 	"github.com/bwmarrin/discordgo"
 
@@ -38,6 +39,7 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	loc, _ := time.LoadLocation(cfg.TimeZone)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -46,32 +48,70 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	am := alertmanager.NewClient(cfg.AlertmanagerURL)
+	metrics := prom.NewClient(cfg.MetricsURL)
 	bot := discord.New(session, discord.Options{
 		GuildID: cfg.GuildID, AlertChannelID: cfg.AlertChannelID, PlatformRoleID: cfg.PlatformRoleID,
 		PingOnCritical: cfg.PingOnCritical, GrafanaURL: cfg.GrafanaURL,
-	}, am, prom.NewClient(cfg.MetricsURL), log)
+		NoticeChannelID: cfg.NoticeChannel, Location: loc,
+	}, am, metrics, log)
 	bot.Attach(session)
 	if err := session.Open(); err != nil {
 		return err
 	}
 	defer session.Close()
 
-	internal := &http.Server{
-		Addr:              cfg.ListenAddr,
-		Handler:           web.Handler(cfg.WebhookToken, bot.HandleAlerts, bot.Ready, log),
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-	servers := []*http.Server{internal}
-
-	if len(cfg.StatusServices) > 0 {
-		checker := statuspage.NewChecker(cfg.StatusTitle, cfg.StatusServices, cfg.StatusSlow, log)
+	var checker *statuspage.Checker
+	if len(cfg.StatusServices) > 0 || cfg.Discovery {
+		var static []statuspage.Target
+		for i, s := range cfg.StatusServices {
+			// Order as listed; discovered apps (order 100 by default) follow.
+			static = append(static, statuspage.Target{Name: s.Name, URL: s.URL, Group: "Apps", Order: i})
+		}
+		opt := statuspage.Options{
+			Title: cfg.StatusTitle, Host: cfg.StatusHost, Slow: cfg.StatusSlow, Location: loc,
+			NoticesFile: cfg.NoticesFile, NoticeFeed: bot.Notices, History: metrics, Log: log,
+		}
+		if cfg.Discovery {
+			d, err := statuspage.InClusterDiscoverer()
+			if err != nil {
+				return err
+			}
+			opt.Discover = d.Discover
+		}
+		checker = statuspage.NewChecker(static, opt)
+		cluster := statuspage.Cluster{Q: metrics, AM: am}
+		checker.AddComponent(statuspage.Component{Name: "Kubernetes cluster", Check: cluster.Check})
+		checker.AddComponent(statuspage.Component{Name: "Discord bot", Check: func(context.Context) statuspage.State {
+			if bot.Ready() {
+				return statuspage.Up
+			}
+			return statuspage.Down
+		}})
+		checker.SetStats(cluster.Stats)
+		bot.OnNotice = func() {
+			// Discord needs a moment before the new message shows in history.
+			time.Sleep(2 * time.Second)
+			checker.RefreshNotices(ctx)
+		}
 		go checker.Run(ctx, cfg.StatusInterval)
+	} else {
+		log.Info("no status services configured, status page disabled")
+	}
+
+	var metricsHandler http.Handler
+	if checker != nil {
+		metricsHandler = checker.MetricsHandler()
+	}
+	servers := []*http.Server{{
+		Addr:              cfg.ListenAddr,
+		Handler:           web.Handler(cfg.WebhookToken, bot.HandleAlerts, bot.Ready, metricsHandler, log),
+		ReadHeaderTimeout: 5 * time.Second,
+	}}
+	if checker != nil {
 		servers = append(servers, &http.Server{
 			Addr: cfg.StatusAddr, Handler: checker.Handler(),
 			ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second,
 		})
-	} else {
-		log.Info("PLUMB_STATUS_SERVICES is empty, status page disabled")
 	}
 
 	errc := make(chan error, len(servers))

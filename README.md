@@ -9,17 +9,22 @@ line, it measures and never moves anything.
   alert group, recorded with the Discord user's name.
 - `/status` gives a one-screen health summary: nodes, firing alerts, broken
   pods, deployments missing replicas, Longhorn, Postgres connections, disk.
-- Serves a public status page (up, slow or down per app, 24h history) on its
-  own port.
+- `/notice` posts a maintenance, incident or info notice to the public status
+  page, with a Resolve button. Notices are Plumb's own Discord messages, read
+  back from the channel, so Plumb keeps no state of its own.
+- Serves the public status page on its own port: up, degraded or down per app,
+  90 days of daily uptime, a cluster summary made of counts only, notices
+  (from `/notice` and from a git-managed `notices.yaml`) and past incidents
+  (detected outages plus written notes).
 
 ## Read-only by design
 
 | What | Access |
 | --- | --- |
-| Kubernetes API | none in v1 (everything comes from metrics) |
+| Kubernetes API | get/list on Traefik IngressRoutes only, for status page discovery (optional) |
 | VictoriaMetrics | read (PromQL queries) |
 | Alertmanager | read alerts, create silences (the Ack button), nothing else |
-| Discord | send and edit its own messages, slash commands |
+| Discord | send, edit and read back its own messages in its channels, slash commands |
 
 Commands and buttons only work in the configured server and only for members
 with the Platform role. Every command and Ack is logged as JSON with
@@ -49,7 +54,41 @@ and it serves nothing but `/` and `/api/status.json`.
 | `PLUMB_STATUS_TITLE` | `BitsAndBricks status` | Page title |
 | `PLUMB_STATUS_SERVICES` | empty (page off) | `Name=https://url,Other=https://url2` |
 | `PLUMB_STATUS_INTERVAL` | `60s` | Probe interval |
-| `PLUMB_STATUS_SLOW` | `2s` | Slower than this shows as "Slow" |
+| `PLUMB_STATUS_SLOW` | `2s` | Slower than this shows as "Degraded" |
+| `PLUMB_STATUS_HOST` | empty | Host shown in the page's title bar |
+| `PLUMB_STATUS_DISCOVERY` | `false` | Also show IngressRoutes labelled `status.reyki.me/show: "true"` |
+| `PLUMB_NOTICES_FILE` | empty | Git-managed notices (YAML, see below) |
+| `PLUMB_NOTICE_CHANNEL_ID` | alert channel | Where `/notice` posts live |
+| `PLUMB_TIMEZONE` | `Europe/Zurich` | Times on the page and in `/notice` |
+
+Status page discovery (on an IngressRoute):
+
+```yaml
+metadata:
+  labels:
+    status.reyki.me/show: "true"
+  annotations:
+    status.reyki.me/name: Floorbit                        # else reyki.me/name, else the route name
+    status.reyki.me/url: https://floor.seatbit.ch/healthz # else https://<first Host>/
+    status.reyki.me/group: Apps                           # optional
+    status.reyki.me/order: "20"                           # optional, else reyki.me/order
+```
+
+`notices.yaml`:
+
+```yaml
+notices:
+  - title: Postgres minor upgrade
+    kind: maintenance            # maintenance | incident | info
+    services: [Seatbit, Floorbit]
+    start: 2026-11-20T20:00:00+01:00
+    end: 2026-11-20T20:30:00+01:00
+    body: Each app may be unreachable for about a minute.
+```
+
+History: Plumb serves `plumb_status_state{service,group}` (2 up, 1 degraded,
+0 down) on `:8080/metrics`. VictoriaMetrics scrapes it, and the page reads 90
+days of daily uptime and 14 days of outages back from there.
 
 Alertmanager receiver:
 
@@ -79,3 +118,6 @@ Images are built by GitHub Actions to `ghcr.io/bitsandbricks-ch/plumb`
 
 - v2: `/alerts`, `/app`, `/db`, `/certs`, `/flux`, `/logs` (private channel only)
 - v3: deploy feed, 08:00 digest
+
+Logo: `assets/plumb-mark.svg` (uses `currentColor` for the string), and
+`assets/plumb-icon.svg` / `plumb-icon-512.png` for the Discord app icon.
