@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Plumb">
+  <rect width="512" height="512" fill="#111111"/>
+  <g transform="translate(64 72) scale(0.75)">
+    <line x1="256" y1="40" x2="256" y2="150" stroke="#f7f7f4" stroke-width="14" stroke-linecap="round"/>
+    <rect x="222" y="138" width="68" height="34" rx="9" fill="#f7f7f4"/>
+    <path d="M256 180 H190 Q150 180 150 222 V250 L256 470 Z" fill="#f27a4f"/>
+    <path d="M256 180 H322 Q362 180 362 222 V250 L256 470 Z" fill="#b23b14"/>
+  </g>
+</svg>
