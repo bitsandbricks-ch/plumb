@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"math"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"time"
@@ -63,6 +64,8 @@ type PastDay struct {
 type Page struct {
 	Title     string       `json:"title"`
 	Host      string       `json:"-"`
+	HomeURL   string       `json:"-"`
+	HomeName  string       `json:"-"`
 	Overall   State        `json:"overall"`
 	Headline  string       `json:"headline"`
 	Active    []NoticeView `json:"notices"`
@@ -139,7 +142,7 @@ func (c *Checker) Snapshot() Page {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	p := Page{Title: c.opt.Title, Host: c.opt.Host, Overall: Unknown, UpdatedAt: now,
+	p := Page{Title: c.opt.Title, Host: c.opt.Host, HomeURL: c.opt.HomeURL, HomeName: homeName(c.opt.HomeURL), Overall: Unknown, UpdatedAt: now,
 		Updated: now.In(loc).Format("15:04 MST"), Stats: c.latestStats}
 
 	var groups []Group
@@ -356,4 +359,13 @@ func secure(w http.ResponseWriter) {
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Referrer-Policy", "no-referrer")
 	h.Set("Cache-Control", "public, max-age=30")
+}
+
+// homeName is the footer link's text: the home page's host name.
+func homeName(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return raw
+	}
+	return u.Host
 }

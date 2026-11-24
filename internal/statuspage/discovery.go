@@ -18,13 +18,11 @@ import (
 
 // Labels and annotations an app uses to appear on the status page.
 const (
-	LabelShow     = "status.reyki.me/show" // label, "true" to opt in
-	AnnName       = "status.reyki.me/name"
-	AnnURL        = "status.reyki.me/url"   // what to probe; default https://<first Host>/
-	AnnGroup      = "status.reyki.me/group" // default "Apps"
-	AnnOrder      = "status.reyki.me/order"
-	annReykiName  = "reyki.me/name" // older annotation, still read
-	annReykiOrder = "reyki.me/order"
+	LabelShow = "status.plumb/show" // label, "true" to opt in
+	AnnName   = "status.plumb/name"
+	AnnURL    = "status.plumb/url"   // what to probe; default https://<first Host>/
+	AnnGroup  = "status.plumb/group" // default "Apps"
+	AnnOrder  = "status.plumb/order"
 )
 
 // Discoverer lists opted-in Traefik IngressRoutes. It needs only
@@ -99,8 +97,8 @@ func (d *Discoverer) Discover(ctx context.Context) ([]Target, error) {
 	var out []Target
 	for _, it := range list.Items {
 		a := it.Metadata.Annotations
-		t := Target{Name: first(a[AnnName], a[annReykiName], it.Metadata.Name), Group: first(a[AnnGroup], "Apps"), URL: a[AnnURL]}
-		t.Order, _ = strconv.Atoi(first(a[AnnOrder], a[annReykiOrder], "100"))
+		t := Target{Name: first(a[AnnName], it.Metadata.Name), Group: first(a[AnnGroup], "Apps"), URL: a[AnnURL]}
+		t.Order, _ = strconv.Atoi(first(a[AnnOrder], "100"))
 		if t.URL == "" {
 			for _, r := range it.Spec.Routes {
 				if m := hostRe.FindStringSubmatch(r.Match); m != nil {

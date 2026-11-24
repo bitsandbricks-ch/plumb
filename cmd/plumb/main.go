@@ -68,7 +68,7 @@ func run(log *slog.Logger) error {
 			static = append(static, statuspage.Target{Name: s.Name, URL: s.URL, Group: "Apps", Order: i})
 		}
 		opt := statuspage.Options{
-			Title: cfg.StatusTitle, Host: cfg.StatusHost, Slow: cfg.StatusSlow, Location: loc,
+			Title: cfg.StatusTitle, Host: cfg.StatusHost, HomeURL: cfg.StatusHomeURL, Slow: cfg.StatusSlow, Location: loc,
 			NoticesFile: cfg.NoticesFile, NoticeFeed: bot.Notices, History: metrics, Log: log,
 		}
 		if cfg.Discovery {
