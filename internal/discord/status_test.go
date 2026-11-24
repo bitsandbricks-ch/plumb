@@ -44,8 +44,8 @@ func healthy() fakeQ {
 	return fakeQ{
 		qNodesTotal: {v(5)}, qNodesReady: {v(5)},
 		qBadPods: nil, qStuckPods: nil, qShortDeps: nil, qLonghorn: nil,
-		qPostgres: {v(0.31, "namespace", "seatbit")},
-		qDisk:     {v(0.42, "nodename", "dom")},
+		qPostgres: {v(0.31, "namespace", "demo")},
+		qDisk:     {v(0.42, "nodename", "node1")},
 	}
 }
 
@@ -55,7 +55,7 @@ func TestStatusAllGood(t *testing.T) {
 	if e.Title != "Oak: all good" || e.Color != colorResolved {
 		t.Fatalf("%q\n%s", e.Title, e.Description)
 	}
-	for _, want := range []string{"5 of 5 ready", "none firing", "seatbit 31%", "dom 42%"} {
+	for _, want := range []string{"5 of 5 ready", "none firing", "demo 31%", "node1 42%"} {
 		if !strings.Contains(e.Description, want) {
 			t.Errorf("missing %q in\n%s", want, e.Description)
 		}

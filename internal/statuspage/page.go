@@ -333,7 +333,7 @@ func (c *Checker) Handler() http.Handler {
 	mux.HandleFunc("GET /api/status.json", func(w http.ResponseWriter, r *http.Request) {
 		secure(w)
 		w.Header().Set("Content-Type", "application/json")
-		// reyki.me reads this for its status badge.
+		// Other sites read this for a status badge.
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		_ = json.NewEncoder(w).Encode(c.Snapshot())
 	})

@@ -219,8 +219,8 @@ func TestDiscover(t *testing.T) {
 			t.Errorf("bad request %v %s", r.Header, r.URL.RawQuery)
 		}
 		w.Write([]byte(`{"items":[
-		 {"metadata":{"name":"floorbit-public","annotations":{"reyki.me/name":"Floorbit"}},"spec":{"routes":[{"match":"Host(` + "`floor.seatbit.ch`" + `) && PathPrefix(` + "`/api/`" + `)"}]}},
-		 {"metadata":{"name":"x","annotations":{"status.reyki.me/name":"Hubra","status.reyki.me/url":"https://app.hubra.club/health","status.reyki.me/group":"Hubra","status.reyki.me/order":"5"}},"spec":{"routes":[]}},
+		 {"metadata":{"name":"floorbit-public","annotations":{"reyki.me/name":"Floorbit"}},"spec":{"routes":[{"match":"Host(` + "`floor.example.com`" + `) && PathPrefix(` + "`/api/`" + `)"}]}},
+		 {"metadata":{"name":"x","annotations":{"status.reyki.me/name":"Hubra","status.reyki.me/url":"https://app.example.com/health","status.reyki.me/group":"Hubra","status.reyki.me/order":"5"}},"spec":{"routes":[]}},
 		 {"metadata":{"name":"nohost"},"spec":{"routes":[{"match":"PathPrefix(` + "`/`" + `)"}]}}]}`))
 	}))
 	defer srv.Close()
@@ -228,10 +228,10 @@ func TestDiscover(t *testing.T) {
 	if err != nil || len(ts) != 2 {
 		t.Fatalf("%+v %v", ts, err)
 	}
-	if ts[0].Name != "Floorbit" || ts[0].URL != "https://floor.seatbit.ch/" || ts[0].Group != "Apps" {
+	if ts[0].Name != "Floorbit" || ts[0].URL != "https://floor.example.com/" || ts[0].Group != "Apps" {
 		t.Fatalf("%+v", ts[0])
 	}
-	if ts[1].Group != "Hubra" || ts[1].URL != "https://app.hubra.club/health" || ts[1].Order != 5 {
+	if ts[1].Group != "Hubra" || ts[1].URL != "https://app.example.com/health" || ts[1].Order != 5 {
 		t.Fatalf("%+v", ts[1])
 	}
 	// Static targets win over discovered ones with the same name.

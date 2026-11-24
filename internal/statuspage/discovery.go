@@ -23,7 +23,7 @@ const (
 	AnnURL        = "status.reyki.me/url"   // what to probe; default https://<first Host>/
 	AnnGroup      = "status.reyki.me/group" // default "Apps"
 	AnnOrder      = "status.reyki.me/order"
-	annReykiName  = "reyki.me/name" // reused from api.reyki.me's listing
+	annReykiName  = "reyki.me/name" // older annotation, still read
 	annReykiOrder = "reyki.me/order"
 )
 

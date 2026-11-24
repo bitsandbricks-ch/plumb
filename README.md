@@ -69,7 +69,7 @@ metadata:
     status.reyki.me/show: "true"
   annotations:
     status.reyki.me/name: Floorbit                        # else reyki.me/name, else the route name
-    status.reyki.me/url: https://floor.seatbit.ch/healthz # else https://<first Host>/
+    status.reyki.me/url: https://app.example.com/healthz  # else https://<first Host>/
     status.reyki.me/group: Apps                           # optional
     status.reyki.me/order: "20"                           # optional, else reyki.me/order
 ```
