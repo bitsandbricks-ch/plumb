@@ -43,8 +43,8 @@ Neither is logged or shown in any response.
 
 ## Known gaps
 
-- The webhook token is optional. When it is empty, the NetworkPolicy is the only guard.
-  TODO: decide whether Plumb should refuse to start without it.
+- Until #9 merges, an empty webhook token lets anyone who can reach `:8080` post alerts. After
+  it, Plumb makes a random token when none is set, so the webhook stays closed.
 - One Discord role covers both reading (`/status`) and writing (Ack, `/notice`). The handbook's
   `viewer` and `operator` split is not modelled yet.
 - Anyone who can reach `:8080` can read `/metrics`; it holds only per-service up or down values.
