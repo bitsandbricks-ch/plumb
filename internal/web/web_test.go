@@ -56,3 +56,17 @@ func TestWebhook(t *testing.T) {
 		t.Fatalf("readyz %d", rec.Code)
 	}
 }
+
+func TestWebhookEmptyTokenRejectsAll(t *testing.T) {
+	h := Handler("", func(context.Context, alertmanager.Webhook) error { return nil },
+		func() bool { return true }, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	for _, auth := range []string{"", "Bearer ", "Bearer x"} {
+		r := httptest.NewRequest("POST", "/webhook/alertmanager", strings.NewReader(`{}`))
+		r.Header.Set("Authorization", auth)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, r)
+		if rec.Code != 401 {
+			t.Fatalf("auth %q: got %d, want 401", auth, rec.Code)
+		}
+	}
+}

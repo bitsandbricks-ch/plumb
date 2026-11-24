@@ -49,7 +49,7 @@ and it serves nothing but `/` and `/api/status.json`.
 | `PLUMB_METRICS_URL` | `http://victoriametrics.platform.svc.cluster.local:8428` | |
 | `PLUMB_GRAFANA_URL` | empty | Link on `/status` |
 | `PLUMB_LISTEN_ADDR` | `:8080` | Internal listener |
-| `PLUMB_WEBHOOK_TOKEN` or `PLUMB_WEBHOOK_TOKEN_FILE` | empty | Bearer token Alertmanager must send |
+| `PLUMB_WEBHOOK_TOKEN` or `PLUMB_WEBHOOK_TOKEN_FILE` | random | Bearer token Alertmanager must send. Unset means a random one, so the webhook refuses everything until you set it |
 | `PLUMB_STATUS_ADDR` | `:8081` | Public status page listener |
 | `PLUMB_STATUS_TITLE` | `BitsAndBricks status` | Page title |
 | `PLUMB_STATUS_SERVICES` | empty (page off) | `Name=https://url,Other=https://url2` |
