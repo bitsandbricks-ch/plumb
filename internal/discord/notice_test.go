@@ -47,12 +47,16 @@ func TestNoticeRoundTrip(t *testing.T) {
 	}
 
 	// Read back: only the bot's own messages count.
-	b.selfID = "bot"
 	api.history = []*discordgo.Message{
 		{Author: &discordgo.User{ID: "bot"}, Embeds: []*discordgo.MessageEmbed{e}},
 		{Author: &discordgo.User{ID: "someone"}, Embeds: []*discordgo.MessageEmbed{e}},
 		{Author: &discordgo.User{ID: "bot"}, Embeds: []*discordgo.MessageEmbed{{Title: "an alert", Footer: &discordgo.MessageEmbedFooter{Text: "group: x"}}}},
 	}
+	// Before Ready we don't know our own ID, so nothing may pass.
+	if ns, err := b.Notices(context.Background()); err == nil || len(ns) != 0 {
+		t.Fatalf("before Ready: %+v %v", ns, err)
+	}
+	b.selfID = "bot"
 	ns, err := b.Notices(context.Background())
 	if err != nil || len(ns) != 1 {
 		t.Fatalf("%+v %v", ns, err)

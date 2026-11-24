@@ -193,13 +193,13 @@ func (b *Bot) HandleInteraction(i *discordgo.Interaction) {
 		case "status":
 			b.status(i)
 		case "notice":
-			b.postNotice(i, uname)
+			b.postNotice(i, uid, uname)
 		default:
 			b.ephemeral(i, "Unknown command.")
 		}
 	case discordgo.InteractionMessageComponent:
 		if i.MessageComponentData().CustomID == "plumb:notice:resolve" {
-			b.resolveNotice(i, uname)
+			b.resolveNotice(i, uid, uname)
 			return
 		}
 		b.ack(i, uid, uname)
