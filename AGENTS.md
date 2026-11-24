@@ -7,9 +7,8 @@ This repo follows the [BitsAndBricks handbook](https://github.com/bitsandbricks-
 profile **service** (see `.mason.toml`). Read its core chapters and the blocks this profile
 lists. The rules below are only what is specific to this repo.
 
-TODO: the handbook has no `service` profile yet (a small always-on Go service in the cluster:
-Go, deploy, observability, and "What a cluster expects from an app" in the Kubernetes block).
-Until it does, follow core, [local agents](https://github.com/bitsandbricks-ch/handbook/blob/main/blocks/local-agents.md)
+TODO: the `service` profile is proposed in handbook PR #6 (a headless service or bot shipped
+to the cluster) and not merged yet. Until it is, follow core, [local agents](https://github.com/bitsandbricks-ch/handbook/blob/main/blocks/local-agents.md)
 where it names Plumb, and [Kubernetes](https://github.com/bitsandbricks-ch/handbook/blob/main/blocks/kubernetes.md).
 
 ## What this is
@@ -46,5 +45,6 @@ go test -race ./...
 - **Examples** in code, tests and docs use `example.com`. The status page discovery label keys (`LabelShow` and friends in `internal/statuspage/discovery.go`)
   and the status page footer link are a known exception, waiting on a decision.
 - **Image tags** differ from the handbook: `main` builds also get
-  `main-<UTC timestamp>-<sha>` for Flux image automation, and `latest` follows `main`. Keep
-  this until the handbook settles it.
+  `main-<UTC timestamp>-<sha>`, which the cluster's Flux image automation follows, and
+  `latest` follows `main`. Keep this until handbook PR #10 (one image tag rule) merges and
+  the cluster's Plumb deployment has moved to pinned versions.
