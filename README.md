@@ -121,3 +121,8 @@ Images are built by GitHub Actions to `ghcr.io/bitsandbricks-ch/plumb`
 
 Logo: `assets/plumb-mark.svg` (uses `currentColor` for the string), and
 `assets/plumb-icon.svg` / `plumb-icon-512.png` for the Discord app icon.
+
+## Licence
+
+[MIT](LICENSE). The bundled fonts in `internal/statuspage/assets/` (Archivo, IBM Plex Mono)
+are under the SIL Open Font License; their licence files sit next to them.
