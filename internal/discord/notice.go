@@ -2,6 +2,7 @@ package discord
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -128,7 +129,7 @@ func (b *Bot) noticeChannel() string {
 }
 
 // postNotice handles /notice.
-func (b *Bot) postNotice(i *discordgo.Interaction, uname string) {
+func (b *Bot) postNotice(i *discordgo.Interaction, uid, uname string) {
 	opts := map[string]string{}
 	for _, o := range i.ApplicationCommandData().Options {
 		opts[o.Name] = o.StringValue()
@@ -169,13 +170,13 @@ func (b *Bot) postNotice(i *discordgo.Interaction, uname string) {
 		b.ephemeral(i, "Posting the notice failed: "+truncate(err.Error(), 300))
 		return
 	}
-	b.log.Info("notice", "audit", true, "user", uname, "kind", n.Kind, "title", n.Title, "start", n.Start, "end", n.End)
+	b.log.Info("notice", "audit", true, "user", uname, "user_id", uid, "kind", n.Kind, "title", n.Title, "start", n.Start, "end", n.End)
 	b.ephemeral(i, "Posted. It shows on the status page within a few seconds. Use its Resolve button when it's over.")
 	b.noticesChanged()
 }
 
 // resolveNotice handles the Resolve button: the notice ends now.
-func (b *Bot) resolveNotice(i *discordgo.Interaction, uname string) {
+func (b *Bot) resolveNotice(i *discordgo.Interaction, uid, uname string) {
 	if i.Message == nil || len(i.Message.Embeds) == 0 {
 		b.ephemeral(i, "That isn't a notice.")
 		return
@@ -202,7 +203,7 @@ func (b *Bot) resolveNotice(i *discordgo.Interaction, uname string) {
 		b.log.Error("resolving notice failed", "err", err)
 		return
 	}
-	b.log.Info("notice resolved", "audit", true, "user", uname, "title", n.Title)
+	b.log.Info("notice resolved", "audit", true, "user", uname, "user_id", uid, "title", n.Title)
 	b.noticesChanged()
 }
 
@@ -211,13 +212,17 @@ func (b *Bot) Notices(ctx context.Context) ([]statuspage.Notice, error) {
 	b.mu.Lock()
 	self := b.selfID
 	b.mu.Unlock()
+	if self == "" {
+		// Without our own ID any author's embed would pass as a notice.
+		return nil, errors.New("not connected to Discord yet")
+	}
 	msgs, err := b.api.ChannelMessages(b.noticeChannel(), 100, "", "", "", discordgo.WithContext(ctx))
 	if err != nil {
 		return nil, err
 	}
 	var out []statuspage.Notice
 	for _, m := range msgs {
-		if m.Author == nil || (self != "" && m.Author.ID != self) || len(m.Embeds) == 0 {
+		if m.Author == nil || m.Author.ID != self || len(m.Embeds) == 0 {
 			continue
 		}
 		if n, ok := NoticeFromEmbed(m.Embeds[0]); ok {
