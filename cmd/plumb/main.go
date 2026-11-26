@@ -39,6 +39,9 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	if cfg.WebhookTokenGenerated {
+		log.Warn("PLUMB_WEBHOOK_TOKEN is not set: using a random token, so Alertmanager webhooks are refused until you set one")
+	}
 	loc, _ := time.LoadLocation(cfg.TimeZone)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

@@ -34,3 +34,21 @@ func TestFromEnvRequired(t *testing.T) {
 		t.Fatalf("defaults wrong: %+v", c)
 	}
 }
+
+func TestWebhookTokenGeneratedWhenUnset(t *testing.T) {
+	for k, v := range map[string]string{"PLUMB_DISCORD_TOKEN": "t", "PLUMB_GUILD_ID": "1", "PLUMB_ALERT_CHANNEL_ID": "2", "PLUMB_PLATFORM_ROLE_ID": "3", "PLUMB_WEBHOOK_TOKEN": "", "PLUMB_WEBHOOK_TOKEN_FILE": ""} {
+		t.Setenv(k, v)
+	}
+	a, err := FromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := FromEnv()
+	if !a.WebhookTokenGenerated || len(a.WebhookToken) != 64 || a.WebhookToken == b.WebhookToken {
+		t.Fatalf("want a fresh random token, got %q generated=%v", a.WebhookToken, a.WebhookTokenGenerated)
+	}
+	t.Setenv("PLUMB_WEBHOOK_TOKEN", "set")
+	if c, _ := FromEnv(); c.WebhookToken != "set" || c.WebhookTokenGenerated {
+		t.Fatalf("a set token must be used as is: %+v", c)
+	}
+}
