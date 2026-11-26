@@ -16,8 +16,8 @@ import (
 // AlertHandler receives one Alertmanager group notification.
 type AlertHandler func(ctx context.Context, w alertmanager.Webhook) error
 
-// Handler builds the internal mux. token may be empty (then the
-// NetworkPolicy is the only guard).
+// Handler builds the internal mux. Every webhook call must carry token; an
+// empty token rejects them all.
 func Handler(token string, onAlert AlertHandler, ready func() bool, metrics http.Handler, log *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
 	if metrics != nil {
@@ -25,12 +25,10 @@ func Handler(token string, onAlert AlertHandler, ready func() bool, metrics http
 		mux.Handle("GET /metrics", metrics)
 	}
 	mux.HandleFunc("POST /webhook/alertmanager", func(w http.ResponseWriter, r *http.Request) {
-		if token != "" {
-			got := r.Header.Get("Authorization")
-			if subtle.ConstantTimeCompare([]byte(got), []byte("Bearer "+token)) != 1 {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
-				return
-			}
+		got := r.Header.Get("Authorization")
+		if token == "" || subtle.ConstantTimeCompare([]byte(got), []byte("Bearer "+token)) != 1 {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
 		}
 		var payload alertmanager.Webhook
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&payload); err != nil {

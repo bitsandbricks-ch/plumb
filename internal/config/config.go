@@ -2,6 +2,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"strconv"
@@ -30,6 +32,9 @@ type Config struct {
 	// Internal listener: Alertmanager webhook and health checks. Never exposed publicly.
 	ListenAddr   string
 	WebhookToken string
+	// WebhookTokenGenerated is true when no token was set and Plumb made a
+	// random one, so the webhook rejects every call until one is set.
+	WebhookTokenGenerated bool
 
 	// Public listener: only the status page.
 	StatusAddr     string
@@ -67,6 +72,14 @@ func FromEnv() (Config, error) {
 	}
 	if c.WebhookToken, err = secret("PLUMB_WEBHOOK_TOKEN"); err != nil {
 		return c, err
+	}
+	if c.WebhookToken == "" {
+		// Closed by default: nobody knows this token, not even Alertmanager.
+		b := make([]byte, 32)
+		if _, err = rand.Read(b); err != nil {
+			return c, fmt.Errorf("generating a webhook token: %w", err)
+		}
+		c.WebhookToken, c.WebhookTokenGenerated = hex.EncodeToString(b), true
 	}
 	if c.PingOnCritical, err = strconv.ParseBool(env("PLUMB_PING_ON_CRITICAL", "true")); err != nil {
 		return c, fmt.Errorf("PLUMB_PING_ON_CRITICAL: %w", err)

@@ -1,0 +1,4 @@
+# Mason's per-repo settings. Profile "service" is proposed, not yet in the handbook (see AGENTS.md).
+[handbook]
+profile = "service"
+version = "v1"
