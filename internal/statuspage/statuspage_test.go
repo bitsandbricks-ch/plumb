@@ -215,12 +215,12 @@ func TestLoadHistory(t *testing.T) {
 
 func TestDiscover(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer tok" || r.URL.Query().Get("labelSelector") != "status.reyki.me/show=true" {
+		if r.Header.Get("Authorization") != "Bearer tok" || r.URL.Query().Get("labelSelector") != "status.plumb/show=true" {
 			t.Errorf("bad request %v %s", r.Header, r.URL.RawQuery)
 		}
 		w.Write([]byte(`{"items":[
-		 {"metadata":{"name":"floorbit-public","annotations":{"reyki.me/name":"Floorbit"}},"spec":{"routes":[{"match":"Host(` + "`floor.seatbit.ch`" + `) && PathPrefix(` + "`/api/`" + `)"}]}},
-		 {"metadata":{"name":"x","annotations":{"status.reyki.me/name":"Hubra","status.reyki.me/url":"https://app.hubra.club/health","status.reyki.me/group":"Hubra","status.reyki.me/order":"5"}},"spec":{"routes":[]}},
+		 {"metadata":{"name":"floorbit-public","annotations":{"status.plumb/name":"Floorbit"}},"spec":{"routes":[{"match":"Host(` + "`floor.example.com`" + `) && PathPrefix(` + "`/api/`" + `)"}]}},
+		 {"metadata":{"name":"x","annotations":{"status.plumb/name":"Hubra","status.plumb/url":"https://app.example.com/health","status.plumb/group":"Hubra","status.plumb/order":"5"}},"spec":{"routes":[]}},
 		 {"metadata":{"name":"nohost"},"spec":{"routes":[{"match":"PathPrefix(` + "`/`" + `)"}]}}]}`))
 	}))
 	defer srv.Close()
@@ -228,10 +228,10 @@ func TestDiscover(t *testing.T) {
 	if err != nil || len(ts) != 2 {
 		t.Fatalf("%+v %v", ts, err)
 	}
-	if ts[0].Name != "Floorbit" || ts[0].URL != "https://floor.seatbit.ch/" || ts[0].Group != "Apps" {
+	if ts[0].Name != "Floorbit" || ts[0].URL != "https://floor.example.com/" || ts[0].Group != "Apps" {
 		t.Fatalf("%+v", ts[0])
 	}
-	if ts[1].Group != "Hubra" || ts[1].URL != "https://app.hubra.club/health" || ts[1].Order != 5 {
+	if ts[1].Group != "Hubra" || ts[1].URL != "https://app.example.com/health" || ts[1].Order != 5 {
 		t.Fatalf("%+v", ts[1])
 	}
 	// Static targets win over discovered ones with the same name.
@@ -273,5 +273,20 @@ func TestCluster(t *testing.T) {
 		if strings.Contains(s.Value, "X") {
 			t.Fatal("alert names must never be public")
 		}
+	}
+}
+
+func TestFooterHomeLink(t *testing.T) {
+	render := func(home string) string {
+		c := NewChecker(nil, Options{Title: "T", HomeURL: home, Log: quiet()})
+		rec := httptest.NewRecorder()
+		c.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+		return rec.Body.String()
+	}
+	if body := render("https://home.example.com/"); !strings.Contains(body, `<a href="https://home.example.com/">home.example.com</a>`) {
+		t.Fatal("footer lacks the home link")
+	}
+	if body := render(""); strings.Contains(body, "home.example.com") || strings.Contains(body, "platform bot ·") {
+		t.Fatal("no home URL must mean no link")
 	}
 }

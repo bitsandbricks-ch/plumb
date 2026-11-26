@@ -3,11 +3,11 @@ package config
 import "testing"
 
 func TestParseServices(t *testing.T) {
-	got, err := ParseServices(" Seatbit=https://seatbit.ch , Floorbit=https://floor.seatbit.ch/health,")
+	got, err := ParseServices(" Seatbit=https://example.com , Floorbit=https://status.example.com/health,")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 || got[0].Name != "Seatbit" || got[1].URL != "https://floor.seatbit.ch/health" {
+	if len(got) != 2 || got[0].Name != "Seatbit" || got[1].URL != "https://status.example.com/health" {
 		t.Fatalf("unexpected %+v", got)
 	}
 	for _, bad := range []string{"Seatbit", "=https://x", "X=ftp://y"} {

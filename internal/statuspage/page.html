@@ -150,7 +150,7 @@ footer { font: 400 .78rem/1.6 var(--mono); color: var(--text-3); text-align: cen
 
   <footer>
     <div class="legend"><span><i class="d-up"></i>operational</span><span><i class="d-degraded"></i>degraded</span><span><i class="d-down"></i>down</span><span><i class="d-maintenance"></i>maintenance</span><span><i class="d-unknown"></i>no data</span></div>
-    Watched by Plumb, the BitsAndBricks platform bot · <a href="https://reyki.me/">reyki.me</a>
+    Watched by Plumb, the BitsAndBricks platform bot{{if .HomeURL}} · <a href="{{.HomeURL}}">{{.HomeName}}</a>{{end}}
   </footer>
 </main>
 </body>
