@@ -85,6 +85,7 @@ type result struct {
 type Options struct {
 	Title       string
 	Host        string        // shown in the title bar, e.g. status.example.com
+	HomeURL     string        // optional link in the footer
 	Slow        time.Duration // slower than this is "degraded"
 	Location    *time.Location
 	NoticesFile string                                      // optional

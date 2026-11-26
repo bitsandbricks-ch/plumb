@@ -38,6 +38,7 @@ type Config struct {
 	StatusInterval time.Duration
 	StatusSlow     time.Duration
 	StatusHost     string // shown in the page's title bar
+	StatusHomeURL  string // optional footer link
 	NoticesFile    string // git-managed notices (ConfigMap), optional
 	Discovery      bool   // list opted-in IngressRoutes
 	NoticeChannel  string // Discord channel for /notice; empty = alert channel
@@ -57,6 +58,7 @@ func FromEnv() (Config, error) {
 		StatusAddr:      env("PLUMB_STATUS_ADDR", ":8081"),
 		StatusTitle:     env("PLUMB_STATUS_TITLE", "BitsAndBricks status"),
 		StatusHost:      os.Getenv("PLUMB_STATUS_HOST"),
+		StatusHomeURL:   os.Getenv("PLUMB_STATUS_HOME_URL"),
 		NoticesFile:     os.Getenv("PLUMB_NOTICES_FILE"),
 		NoticeChannel:   os.Getenv("PLUMB_NOTICE_CHANNEL_ID"),
 		TimeZone:        env("PLUMB_TIMEZONE", "Europe/Zurich"),
@@ -82,6 +84,9 @@ func FromEnv() (Config, error) {
 	}
 	if _, err = time.LoadLocation(c.TimeZone); err != nil {
 		return c, fmt.Errorf("PLUMB_TIMEZONE: %w", err)
+	}
+	if u := c.StatusHomeURL; u != "" && !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, "http://") {
+		return c, fmt.Errorf("PLUMB_STATUS_HOME_URL: want an http(s) URL, got %q", u)
 	}
 	if c.StatusServices, err = ParseServices(os.Getenv("PLUMB_STATUS_SERVICES")); err != nil {
 		return c, err

@@ -56,7 +56,8 @@ and it serves nothing but `/` and `/api/status.json`.
 | `PLUMB_STATUS_INTERVAL` | `60s` | Probe interval |
 | `PLUMB_STATUS_SLOW` | `2s` | Slower than this shows as "Degraded" |
 | `PLUMB_STATUS_HOST` | empty | Host shown in the page's title bar |
-| `PLUMB_STATUS_DISCOVERY` | `false` | Also show IngressRoutes labelled `status.reyki.me/show: "true"` |
+| `PLUMB_STATUS_HOME_URL` | empty | Optional link in the page footer |
+| `PLUMB_STATUS_DISCOVERY` | `false` | Also show IngressRoutes labelled `status.plumb/show: "true"` |
 | `PLUMB_NOTICES_FILE` | empty | Git-managed notices (YAML, see below) |
 | `PLUMB_NOTICE_CHANNEL_ID` | alert channel | Where `/notice` posts live |
 | `PLUMB_TIMEZONE` | `Europe/Zurich` | Times on the page and in `/notice` |
@@ -66,12 +67,12 @@ Status page discovery (on an IngressRoute):
 ```yaml
 metadata:
   labels:
-    status.reyki.me/show: "true"
+    status.plumb/show: "true"
   annotations:
-    status.reyki.me/name: Floorbit                        # else reyki.me/name, else the route name
-    status.reyki.me/url: https://app.example.com/healthz  # else https://<first Host>/
-    status.reyki.me/group: Apps                           # optional
-    status.reyki.me/order: "20"                           # optional, else reyki.me/order
+    status.plumb/name: Floorbit                        # else the route name
+    status.plumb/url: https://app.example.com/healthz  # else https://<first Host>/
+    status.plumb/group: Apps                           # optional
+    status.plumb/order: "20"                           # optional
 ```
 
 `notices.yaml`:
